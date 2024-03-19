@@ -1,0 +1,60 @@
+﻿Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Quote: 13529
+'ALL170-32920221527-0
+'MUM INDUSTRIES
+'6/30/2022 - Sam S.
+'This Project will check for if there is an E-invoice email on the customer master screen ARS002A1 pre save hook 14384 as well as check the ATG_CUSTOMER_EMAIL table for an E-invoice email to accommodate ARC 4744. If there is no email found then the user will be notified. 
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+V.Local.sCust.Declare
+V.Local.sSQL.Declare
+V.Local.bExists.Declare
+
+F.Intrinsic.Control.If(V.Caller.Hook,<>,14384)
+	f.Intrinsic.Control.End
+F.Intrinsic.Control.EndIf
+
+V.Local.sCust.Set(Variable.Passed.000002)
+
+F.ODBC.Connection!con.opencompanyconnection
+
+F.Intrinsic.Control.If(V.Caller.CompanyCode,=,"MAD","or",V.Caller.CompanyCode,=,"MPL")
+	'Check  ATG_CUSTOMER_EMAIL for an email
+	F.Intrinsic.String.Build("Select CUST_EMAIL From ATG_CUSTOMER_EMAIL where CUST_EMAIL <> '' and CUSTOMER  = '{0}' and SALES_EMAIL = 0 ",V.Local.sCust,V.Local.sSQL)
+	F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sSQL)
+	F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF)
+			F.Intrinsic.UI.Msgbox("E-invoicing Email has NOT been found, please set one in the CRM Contacts for this new Customer.")
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Else
+	'Check CONTACT table for an email
+	F.Intrinsic.String.Build("select CUST as CUSTOMER, NAME, EMAIL1 as EMAIL from CONTACT inner join CRM_CONTACT_AUX on CONTACT.ALT_ID = CRM_CONTACT_AUX.CID and 1 & CRM_CONTACT_AUX.E_PROG_SETTINGS <> 0 Where CUST = '{0}' and EMAIL1 <> '' AND TYPE = 'C' AND ACTIVE = 1 ORDER BY NAME",V.Local.sCust,V.Local.sSQL)
+	F.Data.Datatable.CreateFromSQL("dtContact","con",V.Local.sSQL,True)
+	F.Intrinsic.Control.If(V.DataTable.dtContact.RowCount,=,0)
+		F.Intrinsic.UI.Msgbox("E-invoicing Email has NOT been found, please set one in the CRM Contacts for this new Customer.")
+	F.Intrinsic.Control.EndIf
+	F.Data.Datatable.Close("dtContact")
+	
+F.Intrinsic.Control.EndIf
+
+
+F.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End()
+
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$sstanka$}$20220720130814875$}$mP+zz5Tw3sT2/nyap+FbWm4triMPqjXDi6fqqArDjqCUVccmM6ACXlxrUtVm5wT7dunqnvVILm8=
+Program.Sub.Comments.End
