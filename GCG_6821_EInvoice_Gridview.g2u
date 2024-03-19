@@ -1,0 +1,298 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.F_Cust..Create(BaseForm)
+Gui.F_Cust..Caption("Customer E-invoicing emails")
+Gui.F_Cust..Size(1024,720)
+Gui.F_Cust..MinX(0)
+Gui.F_Cust..MinY(0)
+Gui.F_Cust..Position(0,0)
+Gui.F_Cust..AlwaysOnTop(False)
+Gui.F_Cust..FontName("Tahoma")
+Gui.F_Cust..FontSize(8.25)
+Gui.F_Cust..ControlBox(True)
+Gui.F_Cust..MaxButton(True)
+Gui.F_Cust..MinButton(True)
+Gui.F_Cust..MousePointer(0)
+Gui.F_Cust..Moveable(True)
+Gui.F_Cust..Sizeable(True)
+Gui.F_Cust..ShowInTaskBar(True)
+Gui.F_Cust..TitleBar(True)
+Gui.F_Cust..Event(UnLoad,F_Cust_UnLoad)
+Gui.F_Cust.GsgcCustomer.Create(GsGridControl)
+Gui.F_Cust.GsgcCustomer.Enabled(True)
+Gui.F_Cust.GsgcCustomer.Visible(True)
+Gui.F_Cust.GsgcCustomer.Zorder(0)
+Gui.F_Cust.GsgcCustomer.Size(1024,690)
+Gui.F_Cust.GsgcCustomer.Position(0,0)
+Gui.F_Cust.GsgcCustomer.Dock(5)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Quote: 13529
+'ALL170-32920221527-0
+'MUM INDUSTRIES
+'6/30/2022 - Sam S.
+'This Project Is a grid view that shows E-invocing emails for each customer and all customers that have sales in the past 12 months. 
+
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+F.ODBC.Connection!con.opencompanyconnection
+
+F.Intrinsic.Control.CallSub("SetContextMenus")
+F.Intrinsic.Control.CallSub("ODBC")
+F.Intrinsic.Control.CallSub("gvLoad")
+
+Gui.F_Cust..Show
+
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("F_Cust_UnLoad")
+
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.ODBC.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.dDate.Declare
+
+f.Intrinsic.Date.DateAdd("YYYY",-1,V.Ambient.Now,V.Local.dDate)
+
+F.Intrinsic.Control.If(V.DataTable.dtCustomer.Exists)
+	F.Data.Datatable.Close("dtCustomer")
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.If(V.DataTable.dtCustName.Exists)
+	F.Data.Datatable.Close("dtCustName")
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.If(V.Caller.CompanyCode,=,"MAD","or",V.Caller.CompanyCode,=,"MPL")
+	'pull in e-invoice emails with duplicates
+	F.Data.Datatable.CreateFromSQL("dtCustomer","con","Select RTRIM(A.CUSTOMER) as CUSTOMER, '' as NAME_CUSTOMER, RTRIM(A.CUST_EMAIL) as EMAIL, B.DATE_LAST_SALE as DATE_LAST_SALE From ATG_CUSTOMER_EMAIL A LEFT JOIN V_CUSTOMER_SALES B ON A.CUSTOMER = B.CUSTOMER where SALES_EMAIL = 0",True)
+	
+
+	'i want all the other customers that do not have an e-invoice email
+	F.Data.DataTable.CreateFromSQL("dtCustName","con","Select RTRIM(CUSTOMER) as CUSTOMER From V_CUSTOMER_MASTER where Customer not in (select CUSTOMER From ATG_CUSTOMER_EMAIL where SALES_EMAIL = 0)")
+	
+	F.Data.Datatable.Merge("dtCustName","dtCustomer",False,4)
+	F.Data.Datatable.Close("dtCustName")
+	
+	'Dict for Customer name
+	F.Data.Dictionary.CreateFromSQL("dictEmail","con","Select RTRIM(CUSTOMER), RTRIM(NAME_CUSTOMER) From V_CUSTOMER_MASTER ")
+	F.Data.Dictionary.SetDefaultReturn("dictEmail","")
+	F.Data.DataTable.FillFromDictionary("dtCustomer","dictEmail","CUSTOMER","NAME_CUSTOMER")
+	F.Data.Dictionary.Close("dictEmail")
+	
+F.Intrinsic.Control.Else
+	'pull in e-invoice emails with duplicates
+	F.Data.Datatable.CreateFromSQL("dtCustomer","con","select RTRIM(CUST) as CUSTOMER, '' as NAME_CUSTOMER, RTRIM(EMAIL1) as EMAIL from CONTACT inner join CRM_CONTACT_AUX on CONTACT.ALT_ID = CRM_CONTACT_AUX.CID and 1 & CRM_CONTACT_AUX.E_PROG_SETTINGS <> 0 Where EMAIL1 <> '' AND TYPE = 'C' AND ACTIVE = 1 ORDER BY NAME",True)
+
+	'i want all the other customers that do not have an e-invoice email
+	F.Data.DataTable.CreateFromSQL("dtCustName","con","Select RTRIM(CUSTOMER) as CUSTOMER From V_CUSTOMER_MASTER where Customer not in (select RTRIM(CUST) as CUSTOMER from CONTACT inner join CRM_CONTACT_AUX on CONTACT.ALT_ID = CRM_CONTACT_AUX.CID and 1 & CRM_CONTACT_AUX.E_PROG_SETTINGS <> 0 Where EMAIL1 <> '' AND TYPE = 'C' AND ACTIVE = 1 ORDER BY NAME)")
+	
+	'merge them
+	F.Data.Datatable.Merge("dtCustName","dtCustomer",False,4)
+	F.Data.Datatable.Close("dtCustName")
+	
+	'Dict for Customer name
+	F.Data.Dictionary.CreateFromSQL("dictEmail","con","Select RTRIM(CUSTOMER), RTRIM(NAME_CUSTOMER) From V_CUSTOMER_MASTER ")
+	F.Data.Dictionary.SetDefaultReturn("dictEmail","")
+	F.Data.DataTable.FillFromDictionary("dtCustomer","dictEmail","CUSTOMER","NAME_CUSTOMER")
+	F.Data.Dictionary.Close("dictEmail")
+	
+	'Dict for Customer date last sale
+	F.Data.Dictionary.CreateFromSQL("dictEmail","con","Select RTRIM(CUSTOMER), DATE_LAST_SALE From V_CUSTOMER_SALES")
+	F.Data.Dictionary.SetDefaultReturn("dictEmail","1900-01-01")
+	F.Data.Datatable.AddColumn("dtCustomer","DATE_LAST_SALE","date")
+	F.Data.DataTable.FillFromDictionary("dtCustomer","dictEmail","CUSTOMER","DATE_LAST_SALE")
+	F.Data.Dictionary.Close("dictEmail")
+F.Intrinsic.Control.EndIf
+
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("F_Cust_UnLoad")
+
+F.Intrinsic.Control.EndTry
+Program.Sub.ODBC.End
+
+Program.Sub.gvLoad.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+'Set gv Properties
+Gui.F_Cust.GsgcCustomer.AddGridviewFromDatatable("gvCustomer","dtCustomer")
+
+Gui.F_Cust.GsgcCustomer.SetGridviewProperty("gvCustomer","EnableAppearanceOddRow",True)
+Gui.F_Cust.GsgcCustomer.SetGridviewProperty("gvCustomer","OptionsViewColumnAutoWidth",False)
+Gui.F_Cust.GsgcCustomer.SetGridviewProperty("gvCustomer","OptionsViewShowGroupPanel",True)
+Gui.F_Cust.GsgcCustomer.SetGridviewProperty("gvCustomer","OptionsDetailShowDetailTabs",True)
+
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","CUSTOMER",V.Enum.ColumnPropertyNames!ReadOnly,True)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","CUSTOMER",V.Enum.ColumnPropertyNames!AllowEdit,False)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","CUSTOMER",V.Enum.ColumnPropertyNames!Caption,"Customer No.")
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","CUSTOMER",V.Enum.ColumnPropertyNames!MinWidth,80)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","CUSTOMER",V.Enum.ColumnPropertyNames!HeaderFontBold,True)
+
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","NAME_CUSTOMER",V.Enum.ColumnPropertyNames!ReadOnly,True)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","NAME_CUSTOMER",V.Enum.ColumnPropertyNames!AllowEdit,False)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","NAME_CUSTOMER",V.Enum.ColumnPropertyNames!Caption,"Customer Name")
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","NAME_CUSTOMER",V.Enum.ColumnPropertyNames!MinWidth,130)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","NAME_CUSTOMER",V.Enum.ColumnPropertyNames!HeaderFontBold,True)
+
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","EMAIL",V.Enum.ColumnPropertyNames!ReadOnly,True)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","EMAIL",V.Enum.ColumnPropertyNames!AllowEdit,False)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","EMAIL",V.Enum.ColumnPropertyNames!Caption,"Email")
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","EMAIL",V.Enum.ColumnPropertyNames!MinWidth,130)
+Gui.F_Cust.GsgcCustomer.SetColumnProperty("gvCustomer","EMAIL",V.Enum.ColumnPropertyNames!HeaderFontBold,True)
+
+Gui.F_Cust.GsgcCustomer.MainView("gvCustomer")
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("F_Cust_UnLoad")
+
+F.Intrinsic.Control.EndTry
+Program.Sub.gvLoad.End
+
+Program.Sub.SetContextMenus.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+	Gui.F_Cust..ContextMenuCreate("ctxAll")
+	Gui.F_Cust.GsgcCustomer.ContextMenuAttach("ctxAll")
+	Gui.F_Cust..ContextMenuAddItem("ctxAll","Refresh",0,"Refresh")
+	Gui.F_Cust..ContextMenuAddItem("ctxAll","Export",0,"Export")
+	Gui.F_Cust..ContextMenuSetItemEventHandler("ctxAll","Refresh","cmdRefresh_Click")
+	Gui.F_Cust..ContextMenuSetItemEventHandler("ctxAll","Export","gvExport")
+	
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("F_Cust_UnLoad")
+
+F.Intrinsic.Control.EndTry
+Program.Sub.SetContextMenus.End
+
+Program.Sub.gvExport.Start
+V.Local.sError.Declare
+V.Local.sForm.Declare(String, "F_Cust")
+V.Local.sControl.Declare(String, "GsgcCustomer")
+V.Local.sFileExport.Declare
+V.Local.sMsg.Declare
+V.Local.sDate.Declare
+V.Local.sTime.Declare
+V.Local.bExcel.Declare
+V.Local.bFileLocked.Declare
+V.Local.sExportString.Declare
+
+F.Intrinsic.Control.Try
+
+	'Arc Number - 9999
+	F.Automation.MSExcel.CheckPresence(V.Local.bExcel)
+	F.Intrinsic.String.DateString(V.Ambient.Date,V.Local.sDate)
+	F.Intrinsic.String.TimeString(V.Ambient.Time,V.Local.sTime)
+	F.Intrinsic.Control.If(V.Local.bExcel)
+		F.Intrinsic.String.Build("{0}\GCG_6821_EInvoice_{1}_Export_{2}_{3}.xlsx",V.Caller.LocalGSSTempDir,V.Local.sControl,V.Local.sDate,V.Local.sTime,V.Local.sFileExport)
+		F.Intrinsic.File.IsFileLocked(V.Local.sFileExport,V.Local.bFileLocked)
+		F.Intrinsic.Control.If(V.Local.bFileLocked)
+			F.Intrinsic.String.Build("File is already open. Please close and export again.{0}File : {1}",V.Ambient.NewLine,V.Local.sFileExport,V.Local.sMsg)
+			F.Intrinsic.UI.Msgbox(V.Local.sMsg,"File In Use")
+		F.Intrinsic.Control.Else
+			'Gui.[V.Local.sForm].[V.Local.sControl].Export(V.Local.sFileExport,"xlsx")
+			Gui.[V.Local.sForm].[V.Local.sControl].ExportDetails("xlsx", V.Local.sFileExport,1)
+
+			F.Intrinsic.Task.ShellExec(0,"",V.Local.sFileExport,"","",1)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("{0}\GCG_6821_EInvoice_{1}_Export_{2}_{3}.csv",V.Caller.LocalGssTempDir,V.Local.sControl,V.Local.sDate,V.Local.sTime,V.Local.sFileExport)
+		F.Intrinsic.File.IsFileLocked(V.Local.sFileExport,V.Local.bFileLocked)
+		F.Intrinsic.Control.If(V.Local.bFileLocked)
+			F.Intrinsic.String.Build("File is already open. Please close and export again.{0}File: {1}",V.Ambient.NewLine,V.Local.sFileExport,V.Local.sMsg)
+			F.Intrinsic.UI.Msgbox(V.Local.sMsg,"File In Use")
+		F.Intrinsic.Control.Else
+			Gui.[V.Local.sForm].[V.Local.sControl].Export(V.Local.sFileExport,"csv")
+		F.Intrinsic.Control.EndIf
+		F.Intrinsic.Task.ShellExec(0,"",V.Local.sFileExport,"","",1)
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("F_Cust_UnLoad")
+
+F.Intrinsic.Control.EndTry
+Program.Sub.gvExport.End
+
+Program.Sub.cmdRefresh_Click.Start
+'Serialize
+'Blockevents
+'Load Gridview
+'Deserialize
+'unblockevents
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+f.Intrinsic.UI.InvokeWaitDialog("Loading Dashboard","Dashboard")
+	Gui.F_Cust.GsgcCustomer.Visible(False)
+
+		F.Intrinsic.Control.BlockEvents 
+		F.Intrinsic.Control.CallSub("ODBC")
+		F.Intrinsic.Control.CallSub("gvLoad")
+		F.Intrinsic.Control.UnBlockEvents
+
+	Gui.F_Cust.GsgcCustomer.Visible(True)
+f.Intrinsic.UI.CloseWaitDialog
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("F_Cust_UnLoad")
+
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdRefresh_Click.End
+
+
+Program.Sub.F_Cust_UnLoad.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+F.Intrinsic.Control.If(V.ODBC.con.Exists)
+	F.ODBC.Connection!con.Close
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.If(V.DataTable.dtCustomer.Exists)
+	F.Data.Datatable.Close("dtCustomer")
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.End()
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} at {6} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Ambient.Now, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End()
+
+F.Intrinsic.Control.EndTry
+Program.Sub.F_Cust_UnLoad.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$sstanka$}$20220720130143018$}$mP+zz5Tw3sT2/nyap+FbWm4triMPqjXDi6fqqArDjqCUVccmM6ACXraHu089hLNEQEbLJvr6vtk=
+Program.Sub.Comments.End
